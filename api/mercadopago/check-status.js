@@ -109,7 +109,10 @@ export default async function handler(req, res) {
         status_detail: payment.status_detail,
         paymentId: payment.id,
         amount: payment.transaction_amount,
-        paymentMethod: payment.payment_method_id
+        paymentMethod: payment.payment_method_id,
+        qr_code: payment.point_of_interaction?.transaction_data?.qr_code,
+        qr_code_base64: payment.point_of_interaction?.transaction_data?.qr_code_base64,
+        ticket_url: payment.point_of_interaction?.transaction_data?.ticket_url
       });
     }
 

@@ -41,9 +41,10 @@ export default async function handler(req, res) {
       },
       back_urls: {
         success: `${origin}/reserva-confirmada?booking_id=${data.bookingId}&date=${data.date}&name=${encodeURIComponent(data.name || '')}`,
-        pending: `${origin}/reserva-confirmada?booking_id=${data.bookingId}&date=${data.date}&status=pending`,
-        failure: `${origin}/?error=pagamento_cancelado`
+        pending: `${origin}/reserva-confirmada?booking_id=${data.bookingId}&date=${data.date}&name=${encodeURIComponent(data.name || '')}&status=pending`,
+        failure: `${origin}/reserva-confirmada?booking_id=${data.bookingId}&date=${data.date}&name=${encodeURIComponent(data.name || '')}&status=failure`
       },
+      auto_return: 'approved',
       notification_url: `${origin}/api/mercadopago/webhook`,
       external_reference: data.bookingId || String(Date.now()),
       statement_descriptor: 'CHACARA SANTA FE'
