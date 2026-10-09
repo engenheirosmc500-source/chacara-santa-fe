@@ -33,21 +33,31 @@ export default defineConfig(({ mode }) => {
                     return;
                   }
 
+                  const rawName = (data.name || 'Cliente').trim();
+                  const nameParts = rawName.split(' ');
+                  const firstName = nameParts[0] || 'Cliente';
+                  const lastName = nameParts.slice(1).join(' ') || 'Hóspede';
+                  const cleanPhone = (data.whatsapp || '').replace(/\D/g, '');
+
                   const origin = req.headers.origin || 'http://localhost:5173';
                   const preferencePayload = {
                     items: [
                       {
+                        id: `reserva-${data.bookingId || Date.now()}`,
                         title: data.title || `Reserva Chácara Santa Fé - ${data.date}`,
-                        unit_price: Number(data.amount || 1200),
+                        unit_price: Number(data.amount || env.RESERVATION_AMOUNT || 1),
                         quantity: 1,
                         currency_id: 'BRL',
                         description: `Reserva para evento: ${data.eventType || 'Evento'} - ${data.guests || 'Convidados'}`
                       }
                     ],
                     payer: {
-                      name: data.name || 'Cliente',
+                      name: firstName,
+                      surname: lastName,
+                      email: data.email || (cleanPhone ? `cliente${cleanPhone}@gmail.com` : 'cliente@chacarasantafe.com.br'),
                       phone: {
-                        number: (data.whatsapp || '').replace(/\D/g, '')
+                        area_code: cleanPhone.length >= 10 ? cleanPhone.slice(0, 2) : '62',
+                        number: cleanPhone.length >= 10 ? cleanPhone.slice(2) : cleanPhone
                       }
                     },
                     payment_methods: {
