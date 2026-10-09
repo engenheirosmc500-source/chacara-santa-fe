@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Calendar } from "./ui/calendar";
 import { Button } from "./ui/button";
+import { ModalPagamento } from "./ModalPagamento";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 export function SecaoReservas() {
@@ -27,6 +28,17 @@ export function SecaoReservas() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successInfo, setSuccessInfo] = useState<{ date: string; name: string } | null>(null);
+
+  // Estados do Modal de Pagamento Seguro
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalBookingData, setModalBookingData] = useState<{
+    bookingId: string;
+    date: string;
+    name: string;
+    whatsapp: string;
+    eventType: string;
+    guests: string;
+  } | null>(null);
 
   // 1. Carrega datas bloqueadas e pendentes do Supabase
   const fetchDates = async () => {
@@ -169,39 +181,18 @@ export function SecaoReservas() {
         localStorage.setItem("santafe_mock_pending", JSON.stringify(currentPending));
       }
 
-      // Chama a API para gerar a preferência de pagamento seguro
-      const response = await fetch("/api/mercadopago/preference", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bookingId,
-          date: format(selectedDate, "dd/MM/yyyy"),
-          amount: 1, // valor de referência para a sessão
-          name: nome,
-          whatsapp,
-          eventType: tipoEvento,
-          guests: convidados,
-          title: `Reserva Chácara Santa Fé - ${format(selectedDate, "dd/MM/yyyy")}`
-        })
+      // Abre o modal de pagamento seguro instantâneo na própria página
+      setModalBookingData({
+        bookingId,
+        date: format(selectedDate, "dd/MM/yyyy"),
+        name: nome,
+        whatsapp,
+        eventType: tipoEvento,
+        guests: convidados
       });
-
-      const data = await response.json();
-
-      if (response.ok && (data.init_point || data.sandbox_init_point)) {
-        // Redireciona para o checkout seguro de produção (PIX, Cartão, Parcelamento)
-        const checkoutUrl = data.init_point || data.sandbox_init_point;
-        window.location.href = checkoutUrl;
-      } else {
-        if (data.missingToken) {
-          setErrorMessage(
-            "Pagamento online em sincronização. Você pode confirmar sua pré-reserva diretamente pelo WhatsApp abaixo!"
-          );
-        } else {
-          setErrorMessage(data.error || "Não foi possível abrir o pagamento no momento. Tente via WhatsApp.");
-        }
-      }
+      setIsModalOpen(true);
     } catch (err: any) {
-      console.error("Erro ao criar pagamento:", err);
+      console.error("Erro ao preparar reserva:", err);
       setErrorMessage("Erro de conexão ao processar reserva. Tente via WhatsApp.");
     } finally {
       setIsSubmitting(false);
@@ -489,6 +480,16 @@ export function SecaoReservas() {
           </div>
         </div>
       </div>
+
+      {/* Modal de Pagamento Seguro (PIX Instantâneo + Cartão) */}
+      <ModalPagamento
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        bookingData={modalBookingData}
+        onSuccess={() => {
+          fetchDates();
+        }}
+      />
     </section>
   );
 }

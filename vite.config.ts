@@ -195,6 +195,229 @@ export default defineConfig(({ mode }) => {
               return;
             }
 
+            // Rota para geração de PIX Transparente
+            if (req.url === '/api/mercadopago/pix' && req.method === 'POST') {
+              let body = '';
+              req.on('data', chunk => { body += chunk; });
+              req.on('end', async () => {
+                try {
+                  const data = JSON.parse(body || '{}');
+                  const accessToken = env.MERCADO_PAGO_ACCESS_TOKEN || env.VITE_MERCADO_PAGO_ACCESS_TOKEN;
+
+                  if (!accessToken) {
+                    res.statusCode = 400;
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify({ error: 'MERCADO_PAGO_ACCESS_TOKEN não configurado.', missingToken: true }));
+                    return;
+                  }
+
+                  const rawName = (data.name || 'Cliente').trim();
+                  const nameParts = rawName.split(' ');
+                  const firstName = nameParts[0] || 'Cliente';
+                  const lastName = nameParts.slice(1).join(' ') || 'Hóspede';
+
+                  const paymentPayload = {
+                    transaction_amount: Number(data.amount || env.RESERVATION_AMOUNT || 1),
+                    description: data.title || `Reserva Chácara Santa Fé - ${data.date}`,
+                    payment_method_id: 'pix',
+                    payer: {
+                      email: data.email || 'contato@chacarasantafe.com.br',
+                      first_name: firstName,
+                      last_name: lastName
+                    },
+                    external_reference: data.bookingId || String(Date.now())
+                  };
+
+                  const mpRes = await fetch('https://api.mercadopago.com/v1/payments', {
+                    method: 'POST',
+                    headers: {
+                      'Authorization': `Bearer ${accessToken}`,
+                      'Content-Type': 'application/json',
+                      'X-Idempotency-Key': `pix-${data.bookingId || Date.now()}-${Date.now()}`
+                    },
+                    body: JSON.stringify(paymentPayload)
+                  });
+
+                  const mpJson = await mpRes.json();
+
+                  if (!mpRes.ok) {
+                    res.statusCode = mpRes.status;
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify({ error: mpJson.message || 'Erro ao gerar PIX', details: mpJson }));
+                    return;
+                  }
+
+                  res.statusCode = 200;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({
+                    paymentId: mpJson.id,
+                    status: mpJson.status,
+                    qr_code: mpJson.point_of_interaction?.transaction_data?.qr_code,
+                    qr_code_base64: mpJson.point_of_interaction?.transaction_data?.qr_code_base64,
+                    ticket_url: mpJson.point_of_interaction?.transaction_data?.ticket_url,
+                    amount: mpJson.transaction_amount,
+                    bookingId: data.bookingId
+                  }));
+                } catch (err: any) {
+                  res.statusCode = 500;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({ error: err.message }));
+                }
+              });
+              return;
+            }
+
+            // Rota para checar status real de pagamento no Mercado Pago
+            if (req.url?.startsWith('/api/mercadopago/check-status') && req.method === 'GET') {
+              try {
+                const url = new URL(req.url, 'http://localhost:5173');
+                const payment_id = url.searchParams.get('payment_id');
+                const booking_id = url.searchParams.get('booking_id');
+
+                const accessToken = env.MERCADO_PAGO_ACCESS_TOKEN || env.VITE_MERCADO_PAGO_ACCESS_TOKEN;
+                const supabaseUrl = env.VITE_SUPABASE_URL;
+                const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_ANON_KEY;
+
+                if (!accessToken) {
+                  res.statusCode = 400;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({ error: 'Access token não configurado' }));
+                  return;
+                }
+
+                let payment: any = null;
+
+                if (payment_id) {
+                  const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${payment_id}`, {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                  });
+                  if (mpRes.ok) {
+                    payment = await mpRes.json();
+                  }
+                }
+
+                if (!payment && booking_id) {
+                  const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/search?external_reference=${booking_id}&sort=date_created&criteria=desc&limit=1`, {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                  });
+                  if (mpRes.ok) {
+                    const data = await mpRes.json();
+                    if (data.results && data.results.length > 0) {
+                      payment = data.results[0];
+                    }
+                  }
+                }
+
+                if (payment) {
+                  const isApproved = payment.status === 'approved';
+                  const actualBookingId = payment.external_reference || booking_id;
+
+                  if (isApproved && supabaseUrl && supabaseKey && actualBookingId) {
+                    try {
+                      const reqBooking = await fetch(`${supabaseUrl}/rest/v1/booking_requests?id=eq.${actualBookingId}`, {
+                        headers: {
+                          'apikey': supabaseKey,
+                          'Authorization': `Bearer ${supabaseKey}`
+                        }
+                      });
+                      const bookings = await reqBooking.json();
+
+                      if (Array.isArray(bookings) && bookings.length > 0) {
+                        const b = bookings[0];
+                        if (b.status !== 'confirmed') {
+                          await fetch(`${supabaseUrl}/rest/v1/booking_requests?id=eq.${actualBookingId}`, {
+                            method: 'PATCH',
+                            headers: {
+                              'apikey': supabaseKey,
+                              'Authorization': `Bearer ${supabaseKey}`,
+                              'Content-Type': 'application/json',
+                              'Prefer': 'return=representation'
+                            },
+                            body: JSON.stringify({
+                              status: 'confirmed',
+                              payment_id: String(payment.id),
+                              payment_status: 'approved',
+                              amount: payment.transaction_amount
+                            })
+                          });
+
+                          await fetch(`${supabaseUrl}/rest/v1/blocked_dates`, {
+                            method: 'POST',
+                            headers: {
+                              'apikey': supabaseKey,
+                              'Authorization': `Bearer ${supabaseKey}`,
+                              'Content-Type': 'application/json',
+                              'Prefer': 'resolution=merge-duplicates'
+                            },
+                            body: JSON.stringify({ date: b.date })
+                          });
+
+                          await fetch(`${supabaseUrl}/rest/v1/pending_dates?date=eq.${b.date}`, {
+                            method: 'DELETE',
+                            headers: {
+                              'apikey': supabaseKey,
+                              'Authorization': `Bearer ${supabaseKey}`
+                            }
+                          });
+                        }
+                      }
+                    } catch (e) {
+                      console.error('Erro ao sincronizar Supabase em check-status:', e);
+                    }
+                  }
+
+                  res.statusCode = 200;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({
+                    paid: isApproved,
+                    status: payment.status,
+                    paymentId: payment.id,
+                    amount: payment.transaction_amount,
+                    paymentMethod: payment.payment_method_id
+                  }));
+                  return;
+                }
+
+                // Se não encontrou no Mercado Pago, verifica se o Supabase já tem a reserva confirmada
+                if (booking_id && supabaseUrl && supabaseKey) {
+                  const reqBooking = await fetch(`${supabaseUrl}/rest/v1/booking_requests?id=eq.${booking_id}`, {
+                    headers: {
+                      'apikey': supabaseKey,
+                      'Authorization': `Bearer ${supabaseKey}`
+                    }
+                  });
+                  const bookings = await reqBooking.json();
+                  if (Array.isArray(bookings) && bookings.length > 0) {
+                    const b = bookings[0];
+                    if (b.status === 'confirmed') {
+                      res.statusCode = 200;
+                      res.setHeader('Content-Type', 'application/json');
+                      res.end(JSON.stringify({
+                        paid: true,
+                        status: 'approved',
+                        paymentId: b.payment_id,
+                        amount: b.amount,
+                        date: b.date
+                      }));
+                      return;
+                    }
+                  }
+                }
+
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({
+                  paid: false,
+                  status: 'not_found'
+                }));
+              } catch (err: any) {
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: err.message }));
+              }
+              return;
+            }
+
             next();
           });
         }
