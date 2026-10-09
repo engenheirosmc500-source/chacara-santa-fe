@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --forest: #0F2A1F;
+    --forest-2: #1A3B2C;
+    --forest-dark: #07150F;
+    --moss: #3D6A4B;
+    --gold: #D4A72C;
+    --gold-2: #A9831F;
+    --gold-soft: #F0DFA8;
+    --clay: #B3592F;
+    --paper: #F6F8F3;
+    --paper-2: #EDF1E8;
+    --white: #FFFFFF;
+    --ink: #13201A;
+    --muted: #58695F;
+    --line: rgba(15, 42, 31, 0.12);
+    --border: rgba(15, 42, 31, 0.15);
+    --background: #F6F8F3;
+    --foreground: #13201A;
+    --primary: #D4A72C;
+    --primary-foreground: #0F2A1F;
+    --radius: 0.85rem;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 84px;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  body {
+    background-color: var(--paper);
+    color: var(--ink);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: 'Poppins', system-ui, sans-serif;
+  }
+
+  .font-accent {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+}
+
+/* Custom Utilities */
+.shadow-gold {
+  box-shadow: 0 14px 34px -10px rgba(212, 167, 44, 0.45);
+}
+
+.shadow-card {
+  box-shadow: 0 18px 50px -24px rgba(15, 42, 31, 0.35);
+}
+
+/* DayPicker custom styling for modern look */
+.rdp-root {
+  --rdp-accent-color: #D4A72C;
+  --rdp-accent-background-color: #D4A72C;
+  margin: 0;
+}
+
+.rdp-day_button {
+  border-radius: 9999px !important;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.rdp-selected .rdp-day_button {
+  background-color: #D4A72C !important;
+  color: #0F2A1F !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 14px rgba(212, 167, 44, 0.5);
+}
