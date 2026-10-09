@@ -131,6 +131,31 @@ export function AdminPage() {
   useEffect(() => {
     if (isAuthenticated) {
       loadData();
+
+      // Atualização periódica a cada 8 segundos
+      const interval = setInterval(() => {
+        loadData();
+      }, 8000);
+
+      // Canal em tempo real do Supabase
+      let channel: any = null;
+      if (isSupabaseConfigured) {
+        try {
+          channel = supabase
+            .channel("realtime-admin-dashboard")
+            .on("postgres_changes", { event: "*", schema: "public", table: "booking_requests" }, () => loadData())
+            .on("postgres_changes", { event: "*", schema: "public", table: "blocked_dates" }, () => loadData())
+            .on("postgres_changes", { event: "*", schema: "public", table: "pending_dates" }, () => loadData())
+            .subscribe();
+        } catch (e) {
+          console.warn("Realtime admin fallback to interval");
+        }
+      }
+
+      return () => {
+        clearInterval(interval);
+        if (channel) supabase.removeChannel(channel);
+      };
     }
   }, [isAuthenticated]);
 

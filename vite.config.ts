@@ -60,6 +60,7 @@ export default defineConfig(({ mode }) => {
                       pending: `${origin}/reserva-confirmada?booking_id=${data.bookingId}&date=${data.date}&status=pending`,
                       failure: `${origin}/?error=pagamento_cancelado`
                     },
+                    notification_url: `${origin}/api/mercadopago/webhook`,
                     external_reference: data.bookingId || String(Date.now()),
                     statement_descriptor: 'CHACARA SANTA FE'
                   };

@@ -44,7 +44,7 @@ export default async function handler(req, res) {
         pending: `${origin}/reserva-confirmada?booking_id=${data.bookingId}&date=${data.date}&status=pending`,
         failure: `${origin}/?error=pagamento_cancelado`
       },
-      auto_return: 'approved',
+      notification_url: `${origin}/api/mercadopago/webhook`,
       external_reference: data.bookingId || String(Date.now()),
       statement_descriptor: 'CHACARA SANTA FE'
     };

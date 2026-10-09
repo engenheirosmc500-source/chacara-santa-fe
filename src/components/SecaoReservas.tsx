@@ -71,6 +71,31 @@ export function SecaoReservas() {
 
   useEffect(() => {
     fetchDates();
+
+    // Sincronização periódica em segundo plano (a cada 6 segundos)
+    const interval = setInterval(() => {
+      fetchDates();
+    }, 6000);
+
+    // Canal em tempo real do Supabase
+    let channel: any = null;
+    if (isSupabaseConfigured) {
+      try {
+        channel = supabase
+          .channel("realtime-calendar")
+          .on("postgres_changes", { event: "*", schema: "public", table: "booking_requests" }, () => fetchDates())
+          .on("postgres_changes", { event: "*", schema: "public", table: "blocked_dates" }, () => fetchDates())
+          .on("postgres_changes", { event: "*", schema: "public", table: "pending_dates" }, () => fetchDates())
+          .subscribe();
+      } catch (e) {
+        console.warn("Realtime subscription fallback to interval polling");
+      }
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (channel) supabase.removeChannel(channel);
+    };
   }, []);
 
   // Helper para verificar status da data
